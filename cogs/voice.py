@@ -1,17 +1,10 @@
-import discord
-import math
 import asyncio
-import aiohttp
-import json
-import datetime
-from discord.ext import commands
-import traceback
-import sqlite3
-from urllib.parse import quote
-import validators
-from discord.ext.commands.cooldowns import BucketType
-from time import gmtime, strftime
 import os
+import sqlite3
+import traceback
+
+import discord
+from discord.ext import commands
 
 
 class voice(commands.Cog):
@@ -133,15 +126,22 @@ class voice(commands.Cog):
         embed = discord.Embed(title="Help", description="", color=0x7289da)
         embed.set_author(name="Voice Create", url="https://github.com/t1m0thyj/VoiceCreateBot",
                          icon_url="https://i.imgur.com/Ix8pdWil.png")
-        embed.add_field(name=f'**Commands**', value=f'**Lock your channel by using the following command:**\n\n`.voice lock`\n\n------------\n\n'
-                        f'**Unlock your channel by using the following command:**\n\n`.voice unlock`\n\n------------\n\n'
-                        f'**Change your channel name by using the following command:**\n\n`.voice name <name>`\n\n**Example:** `.voice name EU 5kd+`\n\n------------\n\n'
-                        f'**Change your channel limit by using the following command:**\n\n`.voice limit number`\n\n**Example:** `.voice limit 2`\n\n------------\n\n'
-                        f'**Give users permission to join by using the following command:**\n\n`.voice permit @person`\n\n**Example:** `.voice permit @Sam#9452`\n\n------------\n\n'
-                        f'**Claim ownership of channel once the owner has left:**\n\n`.voice claim`\n\n**Example:** `.voice claim`\n\n------------\n\n'
-                        f'**Remove permission and the user from your channel using the following command:**\n\n`.voice reject @person`\n\n**Example:** `.voice reject @Sam#9452`\n\n'
-                        f'**Change channel bitrate if you are a Nitro Booster using the following command:**\n\n`.voice bitrate number`\n\n**Example:** `.voice bitrate 128`\n\n',
-                        inline='false')
+        embed.add_field(name=f'**Commands**\n\n**Lock your channel by using the following command:**',
+                        value=f'`.voice lock`\n\n------------\n\n', inline='false')
+        embed.add_field(name=f'**Unlock your channel by using the following command:**',
+                        value=f'`.voice unlock`\n\n------------\n\n', inline='false')
+        embed.add_field(name=f'**Change your channel name by using the following command:**',
+                        value=f'`.voice name <name>`\n\n**Example:** `.voice name EU 5kd+`\n\n------------\n\n', inline='false')
+        embed.add_field(name=f'**Change your channel limit by using the following command:**',
+                        value='`.voice limit number`\n\n**Example:** `.voice limit 2`\n\n------------\n\n', inline='false')
+        embed.add_field(name=f'**Give users permission to join by using the following command:**',
+                        value='`.voice permit @person`\n\n**Example:** `.voice permit @Sam#9452`\n\n------------\n\n', inline='false')
+        embed.add_field(name=f'**Claim ownership of channel once the owner has left:**',
+                        value='`.voice claim`\n\n**Example:** `.voice claim`\n\n------------\n\n', inline='false')
+        embed.add_field(name=f'**Remove permission and the user from your channel using the following command:**',
+                        value='`.voice reject @person`\n\n**Example:** `.voice reject @Sam#9452`\n\n------------\n\n', inline='false')
+        embed.add_field(name=f'**Change channel bitrate if you are a Nitro Booster using the following command:**',
+                        value='`.voice bitrate number`\n\n**Example:** `.voice bitrate 128`\n\n', inline='false')
         embed.set_footer(
             text='Bot developed by Sam#9452. Improved by DarthMinos#1161 and ArtfulAardvark#9968')
         await ctx.channel.send(embed=embed)
@@ -344,7 +344,7 @@ class voice(commands.Cog):
         voiceGroup = c.fetchone()
         if voiceGroup is None:
             await ctx.channel.send(f"{ctx.author.mention} You don't own a channel.")
-        else:
+        elif 0 <= int(limit) < 100:
             channelID = voiceGroup[0]
             channel = self.bot.get_channel(channelID)
             await channel.edit(user_limit=limit)
@@ -358,6 +358,8 @@ class voice(commands.Cog):
             else:
                 c.execute(
                     "UPDATE userSettings SET channelLimit = ? WHERE userID = ?", (limit, aid))
+        else:
+            await ctx.channel.send(f"{ctx.author.mention} Invalid limit - must be 2-99 or 0 for no limit.")
         conn.commit()
         conn.close()
 
@@ -463,5 +465,5 @@ class voice(commands.Cog):
         conn.close()
 
 
-def setup(bot):
-    bot.add_cog(voice(bot))
+async def setup(bot):
+    await bot.add_cog(voice(bot))
