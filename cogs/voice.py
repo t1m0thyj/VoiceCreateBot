@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sqlite3
 import traceback
@@ -16,7 +17,7 @@ class voice(commands.Cog):
         c.execute(
             "CREATE TABLE IF NOT EXISTS `guildSettings` ( `guildID` INTEGER, `channelName` TEXT, `channelLimit` INTEGER, `maxBitrate` INTEGER )")
         c.execute(
-            "CREATE TABLE IF NOT EXISTS `userSettings` ( `userID` INTEGER, `channelName` TEXT, `channelLimit` INTEGER, `bitrate` INTEGER )")
+            "CREATE TABLE IF NOT EXISTS `userSettings` ( `userID` INTEGER, `channelName` TEXT, `channelLimit` INTEGER, `bitrate` INTEGER, `permissions` TEXT )")
         c.execute(
             "CREATE TABLE IF NOT EXISTS `voiceChannel` ( `userID` INTEGER, `voiceID` INTEGER )")
         conn.commit()
@@ -64,7 +65,7 @@ class voice(commands.Cog):
                         "SELECT voiceCategoryID FROM guild WHERE guildID = ?", (guildID,))
                     voice = c.fetchone()
                     c.execute(
-                        "SELECT channelName, channelLimit, bitrate FROM userSettings WHERE userID = ?", (member.id,))
+                        "SELECT channelName, channelLimit, bitrate, permissions FROM userSettings WHERE userID = ?", (member.id,))
                     setting = c.fetchone()
                     c.execute(
                         "SELECT channelLimit FROM guildSettings WHERE guildID = ?", (guildID,))
@@ -76,6 +77,7 @@ class voice(commands.Cog):
                         else:
                             limit = guildSetting[0]
                         bitrate = 64
+                        permissions = {}
                     else:
                         if guildSetting is None:
                             name = setting[0]
@@ -87,6 +89,7 @@ class voice(commands.Cog):
                             name = setting[0]
                             limit = setting[1]
                         bitrate = setting[2] or 64
+                        permissions = json.loads(setting[3]) if setting[3] else {}
                     categoryID = voice[0]
                     mid = member.id
                     category = self.bot.get_channel(categoryID)
@@ -102,6 +105,12 @@ class voice(commands.Cog):
                     if bitrate != 64:
                         print(f"Setting bitrate to {bitrate}kbps on {channel2}")
                         await channel2.edit(bitrate=bitrate * 1000)
+                    for userID in permissions:
+                        member_temp = member.guild.get_member(int(userID))
+                        if member_temp is None:
+                            continue
+                        print(f"Setting permission to {permissions[userID]} for {member_temp}")
+                        await channel2.set_permissions(member_temp, connect=permissions[userID], read_messages=True)
                     print(f"Track voiceChannel {mid},{channelID}")
                     c.execute(
                         "INSERT INTO voiceChannel VALUES (?, ?)", (mid, channelID))
@@ -302,11 +311,24 @@ class voice(commands.Cog):
         voiceGroup = c.fetchone()
         if voiceGroup is None:
             await ctx.channel.send(f"{ctx.author.mention} You don't own a channel.")
+        elif int(member.id) == aid:
+            await ctx.channel.send(f"{ctx.author.mention} You can't permit yourself.")
         else:
             channelID = voiceGroup[0]
             channel = self.bot.get_channel(channelID)
             await channel.set_permissions(member, connect=True)
             await ctx.channel.send(f'{ctx.author.mention} You have permitted {member.name} to have access to the channel. ✅')
+            c.execute(
+                "SELECT permissions FROM userSettings WHERE userID = ?", (aid,))
+            voiceGroup = c.fetchone()
+            if voiceGroup is None:
+                c.execute("INSERT INTO userSettings VALUES (?, ?, ?, ?, ?)",
+                          (aid, f'{ctx.author.name}', 0, None, None, json.dumps({member.id: True})))
+            else:
+                permissions = json.loads(voiceGroup[0]) if voiceGroup[0] else {}
+                permissions[member.id] = True
+                c.execute(
+                    "UPDATE userSettings SET permissions = ? WHERE userID = ?", (json.dumps(permissions), aid))
         conn.commit()
         conn.close()
 
@@ -320,6 +342,8 @@ class voice(commands.Cog):
         voiceGroup = c.fetchone()
         if voiceGroup is None:
             await ctx.channel.send(f"{ctx.author.mention} You don't own a channel.")
+        elif int(member.id) == aid:
+            await ctx.channel.send(f"{ctx.author.mention} You can't reject yourself.")
         else:
             channelID = voiceGroup[0]
             channel = self.bot.get_channel(channelID)
@@ -332,6 +356,17 @@ class voice(commands.Cog):
                     await member.move_to(channel2)
             await channel.set_permissions(member, connect=False, read_messages=True)
             await ctx.channel.send(f'{ctx.author.mention} You have rejected {member.name} from accessing the channel. ❌')
+            c.execute(
+                "SELECT permissions FROM userSettings WHERE userID = ?", (aid,))
+            voiceGroup = c.fetchone()
+            if voiceGroup is None:
+                c.execute("INSERT INTO userSettings VALUES (?, ?, ?, ?, ?)",
+                          (aid, f'{ctx.author.name}', 0, None, None, json.dumps({member.id: False})))
+            else:
+                permissions = json.loads(voiceGroup[0]) if voiceGroup[0] else {}
+                permissions[member.id] = False
+                c.execute(
+                    "UPDATE userSettings SET permissions = ? WHERE userID = ?", (json.dumps(permissions), aid))
         conn.commit()
         conn.close()
 
@@ -353,8 +388,8 @@ class voice(commands.Cog):
                 "SELECT channelName FROM userSettings WHERE userID = ?", (aid,))
             voiceGroup = c.fetchone()
             if voiceGroup is None:
-                c.execute("INSERT INTO userSettings VALUES (?, ?, ?, ?)",
-                          (aid, f'{ctx.author.name}', limit, None))
+                c.execute("INSERT INTO userSettings VALUES (?, ?, ?, ?, ?)",
+                          (aid, f'{ctx.author.name}', limit, None, None))
             else:
                 c.execute(
                     "UPDATE userSettings SET channelLimit = ? WHERE userID = ?", (limit, aid))
@@ -383,7 +418,7 @@ class voice(commands.Cog):
             voiceGroup = c.fetchone()
             if voiceGroup is None:
                 c.execute(
-                    "INSERT INTO userSettings VALUES (?, ?, ?, ?)", (aid, name, 0, None))
+                    "INSERT INTO userSettings VALUES (?, ?, ?, ?, ?)", (aid, name, 0, None, None))
             else:
                 c.execute(
                     "UPDATE userSettings SET channelName = ? WHERE userID = ?", (name, aid))
@@ -456,8 +491,8 @@ class voice(commands.Cog):
                     "SELECT channelName FROM userSettings WHERE userID = ?", (aid,))
                 voiceGroup = c.fetchone()
                 if voiceGroup is None:
-                    c.execute("INSERT INTO userSettings VALUES (?, ?, ?, ?)",
-                            (aid, f'{ctx.author.name}', 0, new_bitrate))
+                    c.execute("INSERT INTO userSettings VALUES (?, ?, ?, ?, ?)",
+                            (aid, f'{ctx.author.name}', 0, new_bitrate, None))
                 else:
                     c.execute(
                         "UPDATE userSettings SET bitrate = ? WHERE userID = ?", (new_bitrate, aid))
